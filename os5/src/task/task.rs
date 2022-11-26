@@ -1,6 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 
 use super::TaskContext;
+use super::manager::Pass;
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT;
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
@@ -46,6 +47,10 @@ pub struct TaskControlBlockInner {
     pub children: Vec<Arc<TaskControlBlock>>,
     /// It is set when active exit or execution error occurs
     pub exit_code: i32,
+    /// stride scheduling priority
+    pub priority: isize,
+    /// stride scheduling pass
+    pub pass: Pass,
 }
 
 /// Simple access to its internal fields
@@ -103,6 +108,8 @@ impl TaskControlBlock {
                     parent: None,
                     children: Vec::new(),
                     exit_code: 0,
+                    priority: 16,
+                    pass: Pass::new(),
                 })
             },
         };
@@ -170,6 +177,8 @@ impl TaskControlBlock {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,
+                    priority: parent_inner.priority,
+                    pass: parent_inner.pass,
                 })
             },
         });
