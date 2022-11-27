@@ -6,10 +6,11 @@
 
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
-use alloc::collections::VecDeque;
+use crate::config::BIG_STRIDE;
+use alloc::vec::Vec;
 use alloc::sync::Arc;
 use lazy_static::*;
-
+use core::cmp::Ordering;
 pub struct TaskManager {
     ready_queue: Vec<Arc<TaskControlBlock>>,
 }

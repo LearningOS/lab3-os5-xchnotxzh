@@ -1,6 +1,5 @@
 use crate::sbi::shutdown;
 use core::panic::PanicInfo;
-use core::{arch::asm, ptr};
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {

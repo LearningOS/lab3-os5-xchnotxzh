@@ -3,7 +3,7 @@
 use super::TaskContext;
 use super::manager::Pass;
 use super::{pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT;
+use crate::config::{TRAP_CONTEXT, MAX_SYSCALL_NUM};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -51,6 +51,8 @@ pub struct TaskControlBlockInner {
     pub priority: isize,
     /// stride scheduling pass
     pub pass: Pass,
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub start_time: usize,
 }
 
 /// Simple access to its internal fields
@@ -110,6 +112,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     priority: 16,
                     pass: Pass::new(),
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -179,6 +183,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     priority: parent_inner.priority,
                     pass: parent_inner.pass,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         });
@@ -192,6 +198,36 @@ impl TaskControlBlock {
         task_control_block
         // ---- release parent PCB automatically
         // **** release children PCB automatically
+    }
+    // spawn a child process
+    pub fn spawn(self: &Arc<TaskControlBlock>, elf_data: &[u8]) -> Arc<TaskControlBlock> {
+        let mut parent_inner = self.inner_exclusive_access();
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
+        let task_control_block = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn: PhysPageNum::from(0),
+                    base_size: parent_inner.base_size,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    memory_set: MemorySet::new_bare(),
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    priority: parent_inner.priority,
+                    pass: parent_inner.pass,
+                    exit_code: 0,
+                })
+            },
+        });
+        parent_inner.children.push(task_control_block.clone());
+        task_control_block.exec(elf_data);
+        task_control_block
     }
     pub fn getpid(&self) -> usize {
         self.pid.0
